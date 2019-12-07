@@ -14,6 +14,8 @@ typedef int Status;
 typedef struct custom{
     int dealTime;    //交易所需时间
     int money;       //正数为存款，负数为取款
+    int ID;          //客户序号
+    //struct custom *next;
 }*qcustom,custom;
 
 //事件类型
@@ -25,7 +27,7 @@ typedef struct event{
 
 //链表节点
 typedef struct LNode{
-    event data;      //数据域
+    event data;             //数据域
     struct LNode *next;     //下一节点指针域
 }LNode,*Link;
 
@@ -48,16 +50,22 @@ typedef struct Queue{
     int length;         //队列长度
 }Queue;
 
-int total = 10000;           //初始化银行总金额
-int closeTime = 600;         //银行营业时间
-int intervalTime;            //两个事件之间间隔时间
-int dealTimeMax;             //客户最大交易时间
-int dealMoneyMax;            //客户最大交易额
-int currentTime = 0;         //当前时间
-LinkList eq;                 //事件
+custom *dealCustom = NULL;           //正在处理的客户
+custom *leaveCustom = NULL;          //马上离开的客户
+custom *tempCustom = NULL;           //临时的客户
+int total = 10000;                   //初始化银行总金额
+int closeTime = 600;                 //银行营业时间
+int intervalTime;                    //两个事件之间间隔时间
+int dealTimeMax;                     //客户最大交易时间
+int dealMoneyMax;                    //客户最大交易额
+LinkList eventList = NULL;           //事件链表
 Queue *handleQueue = NULL;           //处理队列1
 Queue *waitQueue = NULL;             //等待队列2
-
+int nextCustomTime = 0;              //下一个客户到达时间
+int customID = 1;                    //客户序号
+int currentTime = 0;                 //当前时间
+int handleTime;                      //可以处理业务的时间
+//custom customArr[50];                //存储客户数据的数组
 
 //初始化链表
 LinkList initList(){
@@ -234,16 +242,77 @@ custom random_custom(){
     return ERROR;
    c->dealTime = (rand() % dealTimeMax) + 1;
    c->money = (rand() % 2*dealMoneyMax) - dealMoneyMax;
+   c->ID = customID;
+   customID++;
    return c;
 }
 
-//随机生成下一个客户到达时间
-Status random_arriveTime(){
+//到达客户时插入事件链表，并返回客户以及获得下一个客户到达时间
+custom* arrive_event(int currentTime){
+   if(currentTime == nextCustomTime){
+      nextCustomTime = nextCustomTime + (rand() % intervalTime) + 1;
+      printf("当前时间： %d",&currentTime);
+      custom *c;
+      c = random_custom();
+      event *e;                //创建事件节点
+      e = (event*)malloc(sizeof(event));
+      int customID = c->id;
+      e->id = customID;
+      e->time = currentTime;
+      e->type = 1;
+      insertList(*e,eventList);
+      return c;
+   }else{
+      custom *c;
+      c = (qcustom)malloc(sizeof(custom));
+      c->ID = -1;
+      return c;
+   }
+}
+
+//客户离开时插入链表
+Status leave_custom(custom c){
+    if(c == NULL)
+        return ERROR;
+    int customID = c->ID;
+    event *e = NULL;
+    e = (event*)malloc(sizeof(event));
+    e->id = customID;
+    e->time = currentTime;
+    e->type = 0;
+    insertList(*e,eventList);
+    return TRUE;
+}
+
+//处理客户
+Status handle_custom(custom *c){
+   if(currentTime >= handleTime){
+     //如果该客户是存款或者取款金额小于银行总金额
+     if(c->money > 0 || -(c->money) < total){
+        total += c->money;
+        handleTime = currentTime + c->dealTime;
+        leave_custom(c);
+     }else{
+         enQueue(waitQueue,c);
+     }
+   }else{
+     enQueue(handleQueue,c);
+   }
+   return TRUE;
+}
+
+//处理等待队列
+Status wait_queue(){
 
 }
 
 
+
 int main(void){
+    dealCustom = (custom*)malloc(sizeof(custom));
+    leaveCustom = (custom*)malloc(sizeof(custom));
+    handleQueue = (Queue*)malloc(sizeof(Queue));
+    waitQueue = (Queue*)malloc(sizeof(Queue));
     printf("\t\t\t********银行业务模拟系统********\n");
     printf("请输入两事情间隔时间:");
     scanf("%d",&intervalTime);
@@ -251,6 +320,14 @@ int main(void){
     scanf("%d",&dealTimeMax);
     printf("请输入客户最大交易额:");
     scanf("%d",&dealMoneyMax);
+    for(int i = 0;i < closeTime;i++){
+        tempCustom = (custom*)malloc(sizeof(custom));
+        tempCustom = arrive_event(i);
+        if(tempCustom->ID == -1)
+            free(tempCustom);
+        else
+
+    }
 }
 
 
