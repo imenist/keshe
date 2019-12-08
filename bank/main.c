@@ -64,7 +64,7 @@ int total = 10000;                   //初始化银行总金额
 int closeTime = 600;                 //银行营业时间
 int intervalTime = 15;                    //两个事件之间间隔时间
 int dealTimeMax = 15;                     //客户最大交易时间
-int dealMoneyMax = 100;                    //客户最大交易额
+int dealMoneyMax = 300;                    //客户最大交易额
 //custNode *cn = NULL;                  //顾客链栈节点
 LinkList eventList = NULL;           //事件链表
 Queue *handleQueue = NULL;           //处理队列1
@@ -178,12 +178,20 @@ Status enQueue(Queue *q,custom c){
      q->front = p;
      q->rear = p;
      q->length = 1;
+     printf("%d沙发\n",c.ID);
    }else{
      q->rear->next = p;
      q->rear = p;
      q->length++;
-     printf("%d混蛋",c.ID);
+     printf("%d混蛋,当前长度%d\n",c.ID,q->length);
    }
+}
+
+//队列判空
+Status emptyQueue(Queue *q){
+   if(q->front == q->rear)
+    return TRUE;
+   return ERROR;
 }
 
 
@@ -195,10 +203,12 @@ Status deQueue(Queue *q,custom *c){
     p = q->front;
     *c = p->data;
     q->front = p->next;
-    if(q->rear == p)
+    if(q->rear == p){
         q->rear = NULL;
+        q->front = NULL;
+    }
     free(p);
-    q->length = 0;
+    q->length--;
     return TRUE;
 }
 
@@ -215,9 +225,8 @@ Status traverseQueue(Queue *q){
     while(q->rear != p){
         *c = p->data;
         q->front = p->next;
-        printf("123");
         p = q->front;
-        printf("%d客户，有%d钱",c->ID,c->money);
+        printf("%d客户，有%d钱\n",c->ID,c->money);
     }
     return TRUE;
 }
@@ -278,7 +287,7 @@ custom* random_custom(){
    custom *c;
    c = (qcustom)malloc(sizeof(custom));
    c->dealTime = (rand() % dealTimeMax) + 1;
-   c->money = (rand() % 2*dealMoneyMax) - dealMoneyMax;
+   c->money = (rand() % (2*dealMoneyMax))- dealMoneyMax;
    c->ID = customID;
    customID++;
    return c;
@@ -286,7 +295,6 @@ custom* random_custom(){
 
 //到达客户时插入事件链表，并返回客户以及获得下一个客户到达时间
 custom* arrive_event(){
-   if(currentTime == nextCustomTime){
       nextCustomTime = nextCustomTime + (rand() % intervalTime) + 1;
       printf("当前时间： %d,",currentTime);
       custom *c;
@@ -298,15 +306,9 @@ custom* arrive_event(){
       e->time = currentTime;
       e->type = 1;
       insertList(*e,eventList);
-      printf("欢迎第%d位客户,他有%d这么多钱\n",customID,c->money);
-      printf("我们银行还有%d块钱\n",total);
+      printf("欢迎第%d位客户\n",customID);
+      enQueue(handleQueue,*c);        //不管前面有没有人,先入队
       return c;
-   }else{
-      custom *c;
-      c = (qcustom)malloc(sizeof(custom));
-      c->ID = -1;
-      return c;
-   }
 }
 
 //客户离开时插入链表
@@ -317,36 +319,72 @@ Status leave_custom(custom *c){
     e->time = currentTime;
     e->type = 0;
     insertList(*e,eventList);
-    printf("请%d位顾客慢走\n",customID);
+    printf("\t请%d号顾客慢走\n",customID);
     return TRUE;
 }
 
 //处理客户
 Status handle_custom(custom *c){
-   if(currentTime >= handleTime){
-     //如果该客户是存款或者取款金额小于银行总金额
-     if(c->money > 0 || -(c->money) < total){
-        total += c->money;
-        handleTime = currentTime + c->dealTime;
-        leave_custom(c);
-     }else{
-         printf("请%d稍等,你的钱%d太多了\n",c->ID,c->money);
-         enQueue(waitQueue,*c);
+    //如果该客户是存款或者取款金额小于银行总金额
+    if(c->money > 0 || -(c->money) < total){
+       int lastMoney;
+       if(c->money > 0){
+         lastMoney = total;
+       }
+       total += c->money;
+       handleTime = currentTime + c->dealTime;
+       leave_custom(c);
+       wait_queue(lastMoney);
+       //如果是存款，则检查一遍等待队列
+    }else{
+       printf("请%d稍等,你的钱%d太多了\n",c->ID,c->money);
+       //放入等待队列
+       enQueue(waitQueue,*c);
      }
-   }else{
-     enQueue(handleQueue,*c);
+   return TRUE;
+}
+
+
+//处理排队队列（队列1）
+Status handle_queue(){
+   if(emptyQueue(handleQueue))
+      return ERROR;
+   //到可处理时间时,出队并服务该客户
+   if(handleTime == currentTime){
+      deQueue(handleQueue,dealCustom);    //将出队客户信息存储到dealCustom中
+      handle_custom(dealCustom);
    }
    return TRUE;
 }
 
-//处理等待队列
-Status wait_queue(){
 
+
+//处理等待队列
+Status wait_queue(int lastMoney){
+    if(emptyQueue(waitQueue))
+        return ERROR;
+    int tempMoney = total;                //作为现在银行拥有的金额，当该金额比lastMoney(即接收客户前)少时，跳出检查
+    Queue *temp = initQuene();
+    QNode *check = waitQueue->front;
+    custom *tc = (custom*)malloc(sizeof(custom));
+    while(waitQueue->front != NULL && tempMoney > lastMoney){
+        //将等待队列中的客户出队，看情况离开或者入队
+        deQueue(waitQueue,tc);
+        //银行总余额还是不能处理该客户
+        if(-(tc->money) > total){
+            temp->front = check;
+        }
+        //如果能够满足该客户
+        else{
+            tempMoney = tempMoney + tc->money;
+        }
+    }
 }
 
 
 
 int main(void){
+    srand(time(NULL));     //提供随机数seed
     //cn->top = 0;     //初始化链栈
     dealCustom = (custom*)malloc(sizeof(custom));
     leaveCustom = (custom*)malloc(sizeof(custom));
@@ -363,12 +401,12 @@ int main(void){
     scanf("%d",&dealMoneyMax);
     */
     for(currentTime = 0;currentTime < closeTime;currentTime++){
-        tempCustom = (custom*)malloc(sizeof(custom));
-        tempCustom = arrive_event();
-        if(tempCustom->ID == -1)
-            free(tempCustom);
-        else{
-            handle_custom(tempCustom);
+        if(currentTime == nextCustomTime){
+            tempCustom = (custom*)malloc(sizeof(custom));
+            tempCustom = arrive_event();
+        }
+        if(currentTime == handleTime){
+            handle_queue();
         }
     }
     /*
@@ -378,9 +416,6 @@ int main(void){
     handle_custom(leaveCustom);
     */
     //linkTraverse(eventList);
-    int i = 50;
-    i = traverseQueue(waitQueue);
-    printf("%d",i);
 }
 
 
