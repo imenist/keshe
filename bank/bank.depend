@@ -1,8 +1,9 @@
 # depslib dependency file v1.0
-1575382163 source:d:\课程设计\bank\main.c
+1576657826 source:d:\课程设计\bank\main.c
 	<stdio.h>
 	<stdlib.h>
 	<time.h>
+	<windows.h>
 
 1575788016 source:d:\课程设计\keshe\bank\main.c
 	<stdio.h>
